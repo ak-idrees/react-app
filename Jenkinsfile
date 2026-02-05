@@ -16,6 +16,13 @@ pipeline {
 
     stages {
 
+        stage('Checkout') {
+            steps {
+                // This clones your repo into the workspace
+                checkout scm
+            }
+        }
+
         stage('Install Dependencies') {
             steps {
                 sh 'npm install'
@@ -67,4 +74,3 @@ pipeline {
         }
     }
 }
-
