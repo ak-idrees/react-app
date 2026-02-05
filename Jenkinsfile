@@ -1,32 +1,30 @@
 pipeline {
     agent any
 
+    parameters {
+        choice(
+            name: 'CLIENT',
+            choices: ['sigma', 'roko'],
+            description: 'Select the client to build Docker image for'
+        )
+    }
+
     environment {
-        // Jenkins credentials ID for Docker Hub
         DOCKERHUB_CREDENTIALS = 'dockerhub-credentials-id'
-        IMAGE_SGIMA = 'wimetirix/sgima-app'
-        IMAGE_ROKO =  'wimetirix/roko-app'
+        IMAGE_TAG = "${BUILD_NUMBER}"
     }
 
     stages {
-        stage('Checkout') {
-            steps {
-                // Checkout main branch
-                checkout scm
-            }
-        }
 
         stage('Install Dependencies') {
             steps {
-                // Install npm packages
                 sh 'npm install'
             }
         }
 
         stage('Test') {
             steps {
-                // Run tests (React default tests)
-                sh 'npm test || echo "Tests failed, continuing..."'
+                sh 'npm test -- --watch=false || true'
             }
         }
 
@@ -36,25 +34,37 @@ pipeline {
             }
         }
 
-        stage('Build Docker Images') {
+        stage('Build Docker Image') {
             steps {
                 script {
-                    // Build Docker images for two clients
-                    sh "docker build -t ${IMAGE_SGIMA}:latest ."
-                    sh "docker build -t ${IMAGE_ROKO}:latest ."
+                    if (params.CLIENT == 'sigma') {
+                        env.IMAGE_NAME = 'wimetirix/sgima-app'
+                    } else if (params.CLIENT == 'roko') {
+                        env.IMAGE_NAME = 'wimetirix/roko-app'
+                    } else {
+                        error 'Invalid client selected'
+                    }
+
+                    sh "docker build -t ${env.IMAGE_NAME}:${IMAGE_TAG} ."
                 }
             }
         }
 
-        stage('Push Docker Images') {
+        stage('Push Docker Image') {
             steps {
-                withCredentials([usernamePassword(credentialsId: dockerhub-credentials-id, usernameVariable: 'USER', passwordVariable: 'PASS')]) {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: DOCKERHUB_CREDENTIALS,
+                        usernameVariable: 'USER',
+                        passwordVariable: 'PASS'
+                    )
+                ]) {
                     sh 'echo $PASS | docker login -u $USER --password-stdin'
-                    sh "docker push ${IMAGE_SGIMA}:latest"
-                    sh "docker push ${IMAGE_ROKO}:latest"
+                    sh "docker push ${env.IMAGE_NAME}:${IMAGE_TAG}"
                     sh 'docker logout'
                 }
             }
         }
     }
 }
+
