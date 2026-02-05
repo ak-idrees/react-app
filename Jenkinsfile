@@ -19,7 +19,7 @@ pipeline {
         stage('Checkout') {
             steps {
                 // This clones your repo into the workspace
-                checkout scm
+                 git branch: 'main', url: 'https://github.com/ak-idrees/react-app.git'
             }
         }
 
