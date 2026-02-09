@@ -73,5 +73,5 @@ jobs:
           docker run -d \
             --name react-staging \
             --restart unless-stopped \
-            -p 3002:3000 \
-            ${{ secrets.DOCKERHUB_USERNAME }}/simple-reactjs-app:final
+            -p 3001:3000 \
+            ${{ secrets.DOCKERHUB_USERNAME }}/simple-reactjs-app:staging
