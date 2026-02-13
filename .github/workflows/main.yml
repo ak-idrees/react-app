@@ -75,3 +75,23 @@ jobs:
             --restart unless-stopped \
             -p 3001:3000 \
             ${{ secrets.DOCKERHUB_USERNAME }}/simple-reactjs-app:staging
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: idrees
+    needs: deploy-staging
+    environment:
+      name: Production
+    steps:
+      - name: Deploy container
+        run: |
+          docker pull ${{ secrets.DOCKERHUB_USERNAME }}/simple-reactjs-app:${{ github.sha }}
+
+          docker stop react-production || true
+          docker rm react-production || true
+
+          docker run -d \
+            --name react-production \
+            --restart unless-stopped \
+            -p 3000:3000 \
+            ${{ secrets.DOCKERHUB_USERNAME }}/simple-reactjs-app:${{ github.sha }}
