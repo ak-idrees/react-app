@@ -9,11 +9,15 @@ on:
 defaults:
   run:
     shell: bash
-   runs-on: idrees  # single runner for all jobs
+
+# YAML anchor for single runner
+ x-runner: &default-runner
+  runs-on: idrees
 
 jobs:
 
   prepare:
+    <<: *default-runner
     name: Extract Client & Service
     outputs:
       client: ${{ steps.extract.outputs.client }}
@@ -25,7 +29,6 @@ jobs:
           TAG=${GITHUB_REF#refs/tags/}
           echo "Tag: $TAG"
 
-          # Extract service (first 2 parts) and client (last part)
           SERVICE=$(echo $TAG | cut -d'-' -f1-2)  # dep-frontend or dep-backend
           CLIENT=$(echo $TAG | cut -d'-' -f3)
 
@@ -33,7 +36,8 @@ jobs:
           echo "client=$CLIENT" >> $GITHUB_OUTPUT
 
   build:
-    name: Build App
+    <<: *default-runner
+    name: Build React App
     needs: prepare
     steps:
       - uses: actions/checkout@v3
@@ -46,6 +50,7 @@ jobs:
       - run: npm run build
 
   docker:
+    <<: *default-runner
     name: Build & Push Docker Image
     needs: build
     steps:
@@ -68,6 +73,7 @@ jobs:
           docker push ${{ secrets.DOCKERHUB_USERNAME }}/simple-reactjs-app:${{ github.sha }}
 
   deploy:
+    <<: *default-runner
     name: Deploy Client Service
     needs: docker
     steps:
@@ -80,7 +86,6 @@ jobs:
           CONTAINER_NAME="react-${SERVICE}-${CLIENT}"
           PORT=""
 
-          # Assign ports dynamically (frontend/backend)
           if [ "$SERVICE" = "dep-frontend" ]; then
             PORT=3001
           elif [ "$SERVICE" = "dep-backend" ]; then
