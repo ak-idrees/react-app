@@ -10,15 +10,11 @@ defaults:
   run:
     shell: bash
 
-# YAML anchor for single runner
- x-runner: &default-runner
-  runs-on: idrees
-
 jobs:
 
   prepare:
-    <<: *default-runner
     name: Extract Client & Service
+    runs-on: idrees
     outputs:
       client: ${{ steps.extract.outputs.client }}
       service: ${{ steps.extract.outputs.service }}
@@ -29,15 +25,17 @@ jobs:
           TAG=${GITHUB_REF#refs/tags/}
           echo "Tag: $TAG"
 
-          SERVICE=$(echo $TAG | cut -d'-' -f1-2)  # dep-frontend or dep-backend
+          # Service = dep-frontend or dep-backend
+          SERVICE=$(echo $TAG | cut -d'-' -f1-2)
+          # Client = last part of tag
           CLIENT=$(echo $TAG | cut -d'-' -f3)
 
           echo "service=$SERVICE" >> $GITHUB_OUTPUT
           echo "client=$CLIENT" >> $GITHUB_OUTPUT
 
   build:
-    <<: *default-runner
     name: Build React App
+    runs-on: idrees
     needs: prepare
     steps:
       - uses: actions/checkout@v3
@@ -50,8 +48,8 @@ jobs:
       - run: npm run build
 
   docker:
-    <<: *default-runner
     name: Build & Push Docker Image
+    runs-on: idrees
     needs: build
     steps:
       - uses: actions/checkout@v3
@@ -73,8 +71,8 @@ jobs:
           docker push ${{ secrets.DOCKERHUB_USERNAME }}/simple-reactjs-app:${{ github.sha }}
 
   deploy:
-    <<: *default-runner
     name: Deploy Client Service
+    runs-on: idrees
     needs: docker
     steps:
       - name: Deploy container dynamically
@@ -86,6 +84,7 @@ jobs:
           CONTAINER_NAME="react-${SERVICE}-${CLIENT}"
           PORT=""
 
+          # Assign ports based on service
           if [ "$SERVICE" = "dep-frontend" ]; then
             PORT=3001
           elif [ "$SERVICE" = "dep-backend" ]; then
