@@ -25,10 +25,14 @@ jobs:
           TAG=${GITHUB_REF#refs/tags/}
           echo "Tag: $TAG"
 
-          # Service = dep-frontend or dep-backend
+          # Split tag: dep-frontend-client1 → SERVICE=dep-frontend, CLIENT=client1
           SERVICE=$(echo $TAG | cut -d'-' -f1-2)
-          # Client = last part of tag
           CLIENT=$(echo $TAG | cut -d'-' -f3)
+
+          if [ -z "$SERVICE" ] || [ -z "$CLIENT" ]; then
+            echo "Error: Invalid tag format. Must be dep-frontend-<client> or dep-backend-<client>"
+            exit 1
+          fi
 
           echo "service=$SERVICE" >> $GITHUB_OUTPUT
           echo "client=$CLIENT" >> $GITHUB_OUTPUT
@@ -77,6 +81,7 @@ jobs:
     steps:
       - name: Deploy container dynamically
         run: |
+          # Use outputs from prepare job
           CLIENT="${{ needs.prepare.outputs.client }}"
           SERVICE="${{ needs.prepare.outputs.service }}"
 
@@ -93,6 +98,8 @@ jobs:
             echo "Invalid service type: $SERVICE"
             exit 1
           fi
+
+          echo "Deploying $SERVICE for client $CLIENT on port $PORT"
 
           docker pull $IMAGE
 
