@@ -81,33 +81,33 @@ jobs:
     steps:
       - name: Deploy container dynamically
         run: |
-          # Use outputs from prepare job
-          CLIENT="${{ needs.prepare.outputs.client }}"
-          SERVICE="${{ needs.prepare.outputs.service }}"
+         echo "Deploying SERVICE=$SERVICE CLIENT=$CLIENT"
 
-          IMAGE="${{ secrets.DOCKERHUB_USERNAME }}/simple-reactjs-app:${{ github.sha }}"
-          CONTAINER_NAME="react-${SERVICE}-${CLIENT}"
-          PORT=""
+       IMAGE="${{ secrets.DOCKERHUB_USERNAME }}/simple-reactjs-app:${{ github.sha }}"
+       CONTAINER_NAME="react-${SERVICE}-${CLIENT}"
+       PORT=""
 
-          # Assign ports based on service
-          if [ "$SERVICE" = "dep-frontend" ]; then
-            PORT=3001
-          elif [ "$SERVICE" = "dep-backend" ]; then
-            PORT=3002
-          else
-            echo "Invalid service type: $SERVICE"
-            exit 1
-          fi
+       if [ "$SERVICE" = "dep-frontend" ]; then
+       PORT=3001
+       elif [ "$SERVICE" = "dep-backend" ]; then
+       PORT=3002
+       else
+      echo "Invalid service type: $SERVICE"
+       exit 1
+       fi
 
-          echo "Deploying $SERVICE for client $CLIENT on port $PORT"
+       docker pull $IMAGE
 
-          docker pull $IMAGE
+       docker stop $CONTAINER_NAME || true
+       docker rm $CONTAINER_NAME || true
 
-          docker stop $CONTAINER_NAME || true
-          docker rm $CONTAINER_NAME || true
-
-          docker run -d \
-            --name $CONTAINER_NAME \
-            --restart unless-stopped \
-            -p $PORT:3000 \
-            $IMAGE
+       docker run -d \
+       --name $CONTAINER_NAME \
+       --restart unless-stopped \
+       -p $PORT:3000 \
+       $IMAGE
+  env:
+    CLIENT: ${{ needs.prepare.outputs.client }}
+    SERVICE: ${{ needs.prepare.outputs.service }}
+  
+         
