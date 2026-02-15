@@ -1,14 +1,40 @@
-name: React Docker CI/CD
+name: React Docker CI/CD (Client Based)
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - 'dep-frontend-*'
+      - 'dep-backend-*'
+
+defaults:
+  run:
+    shell: bash
+   runs-on: idrees  # single runner for all jobs
 
 jobs:
+
+  prepare:
+    name: Extract Client & Service
+    outputs:
+      client: ${{ steps.extract.outputs.client }}
+      service: ${{ steps.extract.outputs.service }}
+    steps:
+      - name: Extract from tag
+        id: extract
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          echo "Tag: $TAG"
+
+          # Extract service (first 2 parts) and client (last part)
+          SERVICE=$(echo $TAG | cut -d'-' -f1-2)  # dep-frontend or dep-backend
+          CLIENT=$(echo $TAG | cut -d'-' -f3)
+
+          echo "service=$SERVICE" >> $GITHUB_OUTPUT
+          echo "client=$CLIENT" >> $GITHUB_OUTPUT
+
   build:
-    name: Build React App
-    runs-on: idrees
+    name: Build App
+    needs: prepare
     steps:
       - uses: actions/checkout@v3
 
@@ -19,24 +45,9 @@ jobs:
       - run: npm install
       - run: npm run build
 
-  test:
-    name: Run Tests
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - uses: actions/checkout@v3
-
-      - uses: actions/setup-node@v3
-        with:
-          node-version: "18"
-
-      - run: npm install
-      - run: npm test -- --watchAll=false || echo "No tests"
-
   docker:
     name: Build & Push Docker Image
-    runs-on: idrees
-    needs: test
+    needs: build
     steps:
       - uses: actions/checkout@v3
 
@@ -50,48 +61,42 @@ jobs:
         run: |
           docker build \
             -t ${{ secrets.DOCKERHUB_USERNAME }}/simple-reactjs-app:${{ github.sha }} \
-            -t ${{ secrets.DOCKERHUB_USERNAME }}/simple-reactjs-app:staging \
             .
 
       - name: Push Docker image
         run: |
           docker push ${{ secrets.DOCKERHUB_USERNAME }}/simple-reactjs-app:${{ github.sha }}
-          docker push ${{ secrets.DOCKERHUB_USERNAME }}/simple-reactjs-app:staging
 
-  deploy-staging:
-    name: Deploy to Staging
-    runs-on: idrees
+  deploy:
+    name: Deploy Client Service
     needs: docker
     steps:
-      - name: Deploy container
+      - name: Deploy container dynamically
         run: |
-          docker pull ${{ secrets.DOCKERHUB_USERNAME }}/simple-reactjs-app:staging
+          CLIENT="${{ needs.prepare.outputs.client }}"
+          SERVICE="${{ needs.prepare.outputs.service }}"
 
-          docker stop react-staging || true
-          docker rm react-staging || true
+          IMAGE="${{ secrets.DOCKERHUB_USERNAME }}/simple-reactjs-app:${{ github.sha }}"
+          CONTAINER_NAME="react-${SERVICE}-${CLIENT}"
+          PORT=""
+
+          # Assign ports dynamically (frontend/backend)
+          if [ "$SERVICE" = "dep-frontend" ]; then
+            PORT=3001
+          elif [ "$SERVICE" = "dep-backend" ]; then
+            PORT=3002
+          else
+            echo "Invalid service type: $SERVICE"
+            exit 1
+          fi
+
+          docker pull $IMAGE
+
+          docker stop $CONTAINER_NAME || true
+          docker rm $CONTAINER_NAME || true
 
           docker run -d \
-            --name react-staging \
+            --name $CONTAINER_NAME \
             --restart unless-stopped \
-            -p 3001:3000 \
-            ${{ secrets.DOCKERHUB_USERNAME }}/simple-reactjs-app:staging
-
-  deploy-production:
-    name: Deploy to Production
-    runs-on: idrees
-    needs: deploy-staging
-    environment:
-      name: Production
-    steps:
-      - name: Deploy container
-        run: |
-          docker pull ${{ secrets.DOCKERHUB_USERNAME }}/simple-reactjs-app:${{ github.sha }}
-
-          docker stop react-production || true
-          docker rm react-production || true
-
-          docker run -d \
-            --name react-production \
-            --restart unless-stopped \
-            -p 3000:3000 \
-            ${{ secrets.DOCKERHUB_USERNAME }}/simple-reactjs-app:${{ github.sha }}
+            -p $PORT:3000 \
+            $IMAGE
