@@ -1,113 +1,38 @@
-name: React Docker CI/CD (Client Based)
+name: Deploy React App via Jenkins
 
 on:
-  push:
-    tags:
-      - 'dep-frontend-*'
-      - 'dep-backend-*'
-
-defaults:
-  run:
-    shell: bash
+  repository_dispatch:
+    types: [jenkins_build_complete]
 
 jobs:
-
-  prepare:
-    name: Extract Client & Service
-    runs-on: idrees
-    outputs:
-      client: ${{ steps.extract.outputs.client }}
-      service: ${{ steps.extract.outputs.service }}
-    steps:
-      - name: Extract from tag
-        id: extract
-        run: |
-          TAG=${GITHUB_REF#refs/tags/}
-          echo "Tag: $TAG"
-
-          # Split tag: dep-frontend-client1 → SERVICE=dep-frontend, CLIENT=client1
-          SERVICE=$(echo $TAG | cut -d'-' -f1-2)
-          CLIENT=$(echo $TAG | cut -d'-' -f3)
-
-          if [ -z "$SERVICE" ] || [ -z "$CLIENT" ]; then
-            echo "Error: Invalid tag format. Must be dep-frontend-<client> or dep-backend-<client>"
-            exit 1
-          fi
-
-          echo "service=$SERVICE" >> $GITHUB_OUTPUT
-          echo "client=$CLIENT" >> $GITHUB_OUTPUT
-
-  build:
-    name: Build React App
-    runs-on: idrees
-    needs: prepare
-    steps:
-      - uses: actions/checkout@v3
-
-      - uses: actions/setup-node@v3
-        with:
-          node-version: "18"
-
-      - run: npm install
-      - run: npm run build
-
-  docker:
-    name: Build & Push Docker Image
-    runs-on: idrees
-    needs: build
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_PASS }}
-
-      - name: Build Docker image
-        run: |
-          docker build \
-            -t ${{ secrets.DOCKERHUB_USERNAME }}/simple-reactjs-app:${{ github.sha }} \
-            .
-
-      - name: Push Docker image
-        run: |
-          docker push ${{ secrets.DOCKERHUB_USERNAME }}/simple-reactjs-app:${{ github.sha }}
-
   deploy:
-    name: Deploy Client Service
-    runs-on: idrees
-    needs: docker
+    runs-on: ubuntu-latest
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_PASS: ${{ secrets.DOCKERHUB_PASS }}
+
     steps:
-      - name: Deploy container dynamically
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Pull Docker Image
         run: |
-         echo "Deploying SERVICE=$SERVICE CLIENT=$CLIENT"
+          docker login -u $DOCKERHUB_USERNAME -p $DOCKERHUB_PASS
+          IMAGE=$DOCKERHUB_USERNAME/simple-reactjs-app:${GITHUB_SHA}
+          docker pull $IMAGE
 
-       IMAGE="${{ secrets.DOCKERHUB_USERNAME }}/simple-reactjs-app:${{ github.sha }}"
-       CONTAINER_NAME="react-${SERVICE}-${CLIENT}"
-       PORT=""
+      - name: Deploy Container
+        run: |
+          SERVICE="dep-frontend"   # or dynamic based on tag
+          CLIENT="client1"         # you can pass via payload if needed
+          CONTAINER_NAME="react-${SERVICE}-${CLIENT}"
+          PORT=3001
 
-       if [ "$SERVICE" = "dep-frontend" ]; then
-       PORT=3001
-       elif [ "$SERVICE" = "dep-backend" ]; then
-       PORT=3002
-       else
-      echo "Invalid service type: $SERVICE"
-       exit 1
-       fi
+          docker stop $CONTAINER_NAME || true
+          docker rm $CONTAINER_NAME || true
 
-       docker pull $IMAGE
-
-       docker stop $CONTAINER_NAME || true
-       docker rm $CONTAINER_NAME || true
-
-       docker run -d \
-       --name $CONTAINER_NAME \
-       --restart unless-stopped \
-       -p $PORT:3000 \
-       $IMAGE
-  env:
-    CLIENT: ${{ needs.prepare.outputs.client }}
-    SERVICE: ${{ needs.prepare.outputs.service }}
-  
-         
+          docker run -d \
+            --name $CONTAINER_NAME \
+            --restart unless-stopped \
+            -p $PORT:3000 \
+            $IMAGE
