@@ -43,7 +43,7 @@ pipeline {
                 curl -X POST \
                 -H "Accept: application/vnd.github+json" \
                 -H "Authorization: token $GITHUB_TOKEN" \
-                https://api.github.com/repos/yourusername/react-app/dispatches \
+                https://api.github.com/repos/ak-idrees/react-app/dispatches \
                 -d '{"event_type":"jenkins_build_complete"}'
                 """
             }
