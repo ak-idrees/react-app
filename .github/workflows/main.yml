@@ -25,10 +25,14 @@ jobs:
           TAG=${GITHUB_REF#refs/tags/}
           echo "Tag: $TAG"
 
-          # Service = dep-frontend or dep-backend
+          # Split tag: dep-frontend-client1 → SERVICE=dep-frontend, CLIENT=client1
           SERVICE=$(echo $TAG | cut -d'-' -f1-2)
-          # Client = last part of tag
           CLIENT=$(echo $TAG | cut -d'-' -f3)
+
+          if [ -z "$SERVICE" ] || [ -z "$CLIENT" ]; then
+            echo "Error: Invalid tag format. Must be dep-frontend-<client> or dep-backend-<client>"
+            exit 1
+          fi
 
           echo "service=$SERVICE" >> $GITHUB_OUTPUT
           echo "client=$CLIENT" >> $GITHUB_OUTPUT
@@ -77,30 +81,33 @@ jobs:
     steps:
       - name: Deploy container dynamically
         run: |
-          CLIENT="${{ needs.prepare.outputs.client }}"
-          SERVICE="${{ needs.prepare.outputs.service }}"
+         echo "Deploying SERVICE=$SERVICE CLIENT=$CLIENT"
 
-          IMAGE="${{ secrets.DOCKERHUB_USERNAME }}/simple-reactjs-app:${{ github.sha }}"
-          CONTAINER_NAME="react-${SERVICE}-${CLIENT}"
-          PORT=""
+       IMAGE="${{ secrets.DOCKERHUB_USERNAME }}/simple-reactjs-app:${{ github.sha }}"
+       CONTAINER_NAME="react-${SERVICE}-${CLIENT}"
+       PORT=""
 
-          # Assign ports based on service
-          if [ "$SERVICE" = "dep-frontend" ]; then
-            PORT=3001
-          elif [ "$SERVICE" = "dep-backend" ]; then
-            PORT=3002
-          else
-            echo "Invalid service type: $SERVICE"
-            exit 1
-          fi
+       if [ "$SERVICE" = "dep-frontend" ]; then
+       PORT=3001
+       elif [ "$SERVICE" = "dep-backend" ]; then
+       PORT=3002
+       else
+      echo "Invalid service type: $SERVICE"
+       exit 1
+       fi
 
-          docker pull $IMAGE
+       docker pull $IMAGE
 
-          docker stop $CONTAINER_NAME || true
-          docker rm $CONTAINER_NAME || true
+       docker stop $CONTAINER_NAME || true
+       docker rm $CONTAINER_NAME || true
 
-          docker run -d \
-            --name $CONTAINER_NAME \
-            --restart unless-stopped \
-            -p $PORT:3000 \
-            $IMAGE
+       docker run -d \
+       --name $CONTAINER_NAME \
+       --restart unless-stopped \
+       -p $PORT:3000 \
+       $IMAGE
+  env:
+    CLIENT: ${{ needs.prepare.outputs.client }}
+    SERVICE: ${{ needs.prepare.outputs.service }}
+  
+         
